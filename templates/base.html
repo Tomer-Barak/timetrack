@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}TimeTrack{% endblock %}</title>
+
+    <!-- PWA Meta -->
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TimeTrack">
+    <meta name="description" content="Track your working hours – counseling &amp; development">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{{ url_for('manifest') }}">
+
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/icon-192x192.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192x192.png') }}">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+
+    <!-- Navigation -->
+    <nav class="nav-bar">
+        <div class="nav-inner">
+            <a href="{{ url_for('index') }}" class="nav-brand">
+                <i class="fas fa-clock"></i>
+                <span>TimeTrack</span>
+            </a>
+            <div class="nav-links">
+                <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" id="nav-timer">
+                    <i class="fas fa-stopwatch"></i><span>Timer</span>
+                </a>
+                <a href="{{ url_for('stats_page') }}" class="nav-link {% if request.endpoint == 'stats_page' %}active{% endif %}" id="nav-stats">
+                    <i class="fas fa-chart-bar"></i><span>Stats</span>
+                </a>
+                <a href="{{ url_for('log_page') }}" class="nav-link {% if request.endpoint == 'log_page' %}active{% endif %}" id="nav-log">
+                    <i class="fas fa-list"></i><span>Log</span>
+                </a>
+                <a href="{{ url_for('titles_page') }}" class="nav-link {% if request.endpoint == 'titles_page' %}active{% endif %}" id="nav-titles">
+                    <i class="fas fa-tags"></i><span>Titles</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flash-container">
+        {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- Main content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Mobile bottom nav -->
+    <nav class="mobile-nav">
+        <a href="{{ url_for('index') }}" class="mobile-nav-item {% if request.endpoint == 'index' %}active{% endif %}">
+            <i class="fas fa-stopwatch"></i><span>Timer</span>
+        </a>
+        <a href="{{ url_for('stats_page') }}" class="mobile-nav-item {% if request.endpoint == 'stats_page' %}active{% endif %}">
+            <i class="fas fa-chart-bar"></i><span>Stats</span>
+        </a>
+        <a href="{{ url_for('log_page') }}" class="mobile-nav-item {% if request.endpoint == 'log_page' %}active{% endif %}">
+            <i class="fas fa-list"></i><span>Log</span>
+        </a>
+        <a href="{{ url_for('titles_page') }}" class="mobile-nav-item {% if request.endpoint == 'titles_page' %}active{% endif %}">
+            <i class="fas fa-tags"></i><span>Titles</span>
+        </a>
+    </nav>
+
+    <!-- PWA Service Worker -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(reg => {
+                    console.log('[SW] Registered', reg.scope);
+                    if (reg.waiting) {
+                        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                    reg.addEventListener('updatefound', () => {
+                        const sw = reg.installing;
+                        sw && sw.addEventListener('statechange', () => {
+                            if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+                                sw.postMessage({ type: 'SKIP_WAITING' });
+                            }
+                        });
+                    });
+                    navigator.serviceWorker.addEventListener('controllerchange', () => {
+                        if (!window.__swReloading) {
+                            window.__swReloading = true;
+                            window.location.reload();
+                        }
+                    });
+                }).catch(err => console.log('[SW] Failed', err));
+            });
+        }
+    </script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

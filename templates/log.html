@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}TimeTrack – Log{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1 class="section-title"><i class="fas fa-list" style="color:var(--accent);margin-right:.5rem;"></i>Time Log</h1>
+    <button class="btn btn-primary" onclick="openManualModal()"><i class="fas fa-plus"></i> Add Entry</button>
+</div>
+
+<div class="card">
+    {% if entries %}
+    <ul class="entry-list" id="entry-list">
+        {% for e in entries %}
+        <li class="entry-item" id="entry-{{ e.id }}">
+            <div class="entry-color" style="background:{{ e.color }};"></div>
+            <div class="entry-info">
+                <div class="entry-title">{{ e.title_name }}</div>
+                <div class="entry-meta">
+                    <span><i class="far fa-calendar"></i> {{ e.start_time[:10] }}</span>
+                    <span><i class="far fa-clock"></i> {{ e.start_time[11:16] }} – {{ e.end_time[11:16] }}</span>
+                    <span class="cat-badge {{ e.category }}">{{ e.category }}</span>
+                </div>
+            </div>
+            <div class="entry-duration" style="color:{{ e.color }};">
+                <span class="dur" data-start="{{ e.start_time }}" data-end="{{ e.end_time }}"></span>
+            </div>
+            <div class="entry-actions">
+                <button onclick="openEditModal({{ e.id }}, {{ e.title_id }}, '{{ e.start_time }}', '{{ e.end_time }}')"
+                    title="Edit"><i class="fas fa-pen"></i></button>
+                <button class="delete" onclick="deleteEntry({{ e.id }})" title="Delete"><i
+                        class="fas fa-trash"></i></button>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-inbox"></i>
+        <p>No time entries recorded yet.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Manual Entry Modal -->
+<div class="modal-backdrop" id="manual-modal">
+    <div class="modal-box">
+        <div class="modal-title">Add Manual Entry</div>
+        <div class="form-group">
+            <label for="manual-title">Title</label>
+            <select class="form-control" id="manual-title">
+                {% for t in titles %}
+                <option value="{{ t.id }}">{{ t.name }} ({{ t.category }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="manual-date">Date</label>
+            <input type="date" class="form-control" id="manual-date">
+        </div>
+        <div class="form-group">
+            <label for="manual-start">Start Time</label>
+            <input type="time" class="form-control" id="manual-start">
+        </div>
+        <div class="form-group">
+            <label for="manual-end">End Time</label>
+            <input type="time" class="form-control" id="manual-end">
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-ghost" onclick="closeManualModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveManualEntry()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Entry Modal -->
+<div class="modal-backdrop" id="edit-modal">
+    <div class="modal-box">
+        <div class="modal-title">Edit Entry</div>
+        <input type="hidden" id="edit-id">
+        <div class="form-group">
+            <label for="edit-title">Title</label>
+            <select class="form-control" id="edit-title">
+                {% for t in titles %}
+                <option value="{{ t.id }}">{{ t.name }} ({{ t.category }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="edit-date">Date</label>
+            <input type="date" class="form-control" id="edit-date">
+        </div>
+        <div class="form-group">
+            <label for="edit-start">Start Time</label>
+            <input type="time" class="form-control" id="edit-start">
+        </div>
+        <div class="form-group">
+            <label for="edit-end">End Time</label>
+            <input type="time" class="form-control" id="edit-end">
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveEditEntry()">Save Changes</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Parse "YYYY-MM-DD HH:MM:SS" as LOCAL time (not UTC)
+    function parseLocalDate(str) {
+        const [datePart, timePart] = str.split(' ');
+        const [y, mo, d] = datePart.split('-').map(Number);
+        const [h, mi, s] = (timePart || '00:00:00').split(':').map(Number);
+        return new Date(y, mo - 1, d, h, mi, s);
+    }
+    // Duration display
+    function fmtHours(seconds) {
+        const h = seconds / 3600;
+        if (h < 1) return Math.round(h * 60) + 'm';
+        return h.toFixed(1) + 'h';
+    }
+    document.querySelectorAll('.dur').forEach(el => {
+        const s = parseLocalDate(el.dataset.start);
+        const e = parseLocalDate(el.dataset.end);
+        el.textContent = fmtHours((e - s) / 1000);
+    });
+
+    // Add manual entry
+    function openManualModal() {
+        document.getElementById('manual-date').value = new Date().toISOString().slice(0, 10);
+        document.getElementById('manual-modal').classList.add('open');
+    }
+    function closeManualModal() {
+        document.getElementById('manual-modal').classList.remove('open');
+    }
+    async function saveManualEntry() {
+        const titleId = document.getElementById('manual-title').value;
+        const date = document.getElementById('manual-date').value;
+        const startTime = document.getElementById('manual-start').value;
+        const endTime = document.getElementById('manual-end').value;
+        if (!titleId || !date || !startTime || !endTime) { alert('Please fill all fields'); return; }
+        const res = await fetch('/api/entry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title_id: parseInt(titleId), start_time: `${date} ${startTime}:00`, end_time: `${date} ${endTime}:00` })
+        });
+        if (res.ok) window.location.reload();
+        else alert('Failed to save');
+    }
+
+    // Edit entry
+    function openEditModal(id, titleId, startTime, endTime) {
+        document.getElementById('edit-id').value = id;
+        document.getElementById('edit-title').value = titleId;
+        document.getElementById('edit-date').value = startTime.slice(0, 10);
+        document.getElementById('edit-start').value = startTime.slice(11, 16);
+        document.getElementById('edit-end').value = endTime.slice(11, 16);
+        document.getElementById('edit-modal').classList.add('open');
+    }
+    function closeEditModal() {
+        document.getElementById('edit-modal').classList.remove('open');
+    }
+    async function saveEditEntry() {
+        const id = document.getElementById('edit-id').value;
+        const titleId = document.getElementById('edit-title').value;
+        const date = document.getElementById('edit-date').value;
+        const startTime = document.getElementById('edit-start').value;
+        const endTime = document.getElementById('edit-end').value;
+        if (!titleId || !date || !startTime || !endTime) { alert('Please fill all fields'); return; }
+        const res = await fetch(`/api/entry/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title_id: parseInt(titleId), start_time: `${date} ${startTime}:00`, end_time: `${date} ${endTime}:00` })
+        });
+        if (res.ok) window.location.reload();
+        else alert('Failed to update');
+    }
+
+    // Delete entry
+    async function deleteEntry(id) {
+        if (!confirm('Delete this entry?')) return;
+        const res = await fetch(`/api/entry/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+            document.getElementById('entry-' + id).remove();
+        }
+    }
+
+    // Close modals on backdrop click
+    document.getElementById('manual-modal').addEventListener('click', function (e) { if (e.target === this) closeManualModal(); });
+    document.getElementById('edit-modal').addEventListener('click', function (e) { if (e.target === this) closeEditModal(); });
+</script>
+{% endblock %}

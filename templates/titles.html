@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}TimeTrack – Titles{% endblock %}
+
+{% block content %}
+<div class="section-header">
+    <h1 class="section-title"><i class="fas fa-tags" style="color:var(--accent);margin-right:.5rem;"></i>Manage Titles
+    </h1>
+    <button class="btn btn-primary" onclick="openAddModal()"><i class="fas fa-plus"></i> Add Title</button>
+</div>
+
+{% set cats = {} %}
+{% for t in titles %}
+{% if t.category not in cats %}
+{% if cats.update({t.category: []}) %}{% endif %}
+{% endif %}
+{% if cats[t.category].append(t) %}{% endif %}
+{% endfor %}
+
+{% for cat in ['counseling', 'development', 'other'] %}
+{% if cat in cats %}
+<div class="card mb-2">
+    <div class="card-header">
+        <i class="fas fa-{{ 'comments' if cat=='counseling' else 'code' if cat=='development' else 'tag' }}"></i>
+        {{ cat | capitalize }}
+        <span class="cat-badge {{ cat }}" style="margin-left:.5rem;">{{ cats[cat]|length }}</span>
+    </div>
+    <div class="title-grid">
+        {% for t in cats[cat] %}
+        <div class="title-card">
+            <div class="tc-color" style="background:{{ t.color }};">{{ t.name[0] }}</div>
+            <div class="tc-info">
+                <div class="tc-name">{{ t.name }}</div>
+                <div class="tc-cat">{{ t.category }}</div>
+            </div>
+            <div class="tc-actions">
+                <button class="btn btn-ghost" style="padding:.35rem .5rem;font-size:.75rem;"
+                    onclick="openEditTitleModal({{ t.id }}, '{{ t.name }}', '{{ t.category }}', '{{ t.color }}')"><i
+                        class="fas fa-pen"></i></button>
+                <button class="btn btn-danger" style="padding:.35rem .5rem;font-size:.75rem;"
+                    onclick="deleteTitle({{ t.id }})"><i class="fas fa-trash"></i></button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endfor %}
+
+<!-- Add Title Modal -->
+<div class="modal-backdrop" id="add-modal">
+    <div class="modal-box">
+        <div class="modal-title">Add New Title</div>
+        <div class="form-group">
+            <label for="add-name">Title Name</label>
+            <input type="text" class="form-control" id="add-name" placeholder="e.g. Workshop Facilitation">
+        </div>
+        <div class="form-group">
+            <label for="add-category">Category</label>
+            <select class="form-control" id="add-category">
+                <option value="counseling">Counseling</option>
+                <option value="development">Development</option>
+                <option value="other">Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="add-color">Color</label>
+            <input type="color" class="form-control" id="add-color" value="#6366f1" style="height:42px;padding:4px;">
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-ghost" onclick="closeAddModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveTitle()">Add Title</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Title Modal -->
+<div class="modal-backdrop" id="edit-title-modal">
+    <div class="modal-box">
+        <div class="modal-title">Edit Title</div>
+        <input type="hidden" id="edit-title-id">
+        <div class="form-group">
+            <label for="edit-title-name">Title Name</label>
+            <input type="text" class="form-control" id="edit-title-name">
+        </div>
+        <div class="form-group">
+            <label for="edit-title-category">Category</label>
+            <select class="form-control" id="edit-title-category">
+                <option value="counseling">Counseling</option>
+                <option value="development">Development</option>
+                <option value="other">Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="edit-title-color">Color</label>
+            <input type="color" class="form-control" id="edit-title-color" style="height:42px;padding:4px;">
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-ghost" onclick="closeEditTitleModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="updateTitle()">Save Changes</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function openAddModal() { document.getElementById('add-modal').classList.add('open'); }
+    function closeAddModal() { document.getElementById('add-modal').classList.remove('open'); }
+
+    async function saveTitle() {
+        const name = document.getElementById('add-name').value.trim();
+        const category = document.getElementById('add-category').value;
+        const color = document.getElementById('add-color').value;
+        if (!name) { alert('Please enter a title name'); return; }
+        const res = await fetch('/api/title', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, category, color })
+        });
+        if (res.ok) window.location.reload();
+        else { const d = await res.json(); alert(d.error || 'Failed'); }
+    }
+
+    function openEditTitleModal(id, name, category, color) {
+        document.getElementById('edit-title-id').value = id;
+        document.getElementById('edit-title-name').value = name;
+        document.getElementById('edit-title-category').value = category;
+        document.getElementById('edit-title-color').value = color;
+        document.getElementById('edit-title-modal').classList.add('open');
+    }
+    function closeEditTitleModal() { document.getElementById('edit-title-modal').classList.remove('open'); }
+
+    async function updateTitle() {
+        const id = document.getElementById('edit-title-id').value;
+        const name = document.getElementById('edit-title-name').value.trim();
+        const category = document.getElementById('edit-title-category').value;
+        const color = document.getElementById('edit-title-color').value;
+        if (!name) { alert('Please enter a title name'); return; }
+        const res = await fetch(`/api/title/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, category, color })
+        });
+        if (res.ok) window.location.reload();
+        else alert('Failed to update');
+    }
+
+    async function deleteTitle(id) {
+        if (!confirm('Delete this title and ALL its time entries?')) return;
+        const res = await fetch(`/api/title/${id}`, { method: 'DELETE' });
+        if (res.ok) window.location.reload();
+    }
+
+    // Close modals on backdrop click
+    document.getElementById('add-modal').addEventListener('click', function (e) { if (e.target === this) closeAddModal(); });
+    document.getElementById('edit-title-modal').addEventListener('click', function (e) { if (e.target === this) closeEditTitleModal(); });
+</script>
+{% endblock %}
