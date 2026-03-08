@@ -5,7 +5,7 @@ Flask application serving a single-page-style time tracker.
 
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, jsonify, flash, send_from_directory
+    url_for, jsonify, flash, send_from_directory, Response
 )
 from datetime import datetime
 import logging
@@ -72,7 +72,8 @@ def stats_page():
     """Detailed statistics page."""
     stats = db.get_stats()
     titles = db.get_titles()
-    return render_template('stats.html', stats=stats, titles=titles)
+    current_month = datetime.now().strftime('%Y-%m')
+    return render_template('stats.html', stats=stats, titles=titles, current_month=current_month)
 
 
 @app.route('/log')
@@ -196,6 +197,84 @@ def api_clear_all():
     """Delete ALL time entries. Titles are kept."""
     db.clear_all_entries()
     return jsonify({'ok': True})
+
+
+@app.route('/api/report/export')
+def api_export_report():
+    month_str = request.args.get('month')
+    if not month_str:
+        month_str = datetime.now().strftime('%Y-%m')
+        
+    try:
+        year, month = map(int, month_str.split('-'))
+        start_date = f"{year:04d}-{month:02d}-01 00:00:00"
+        
+        if month == 12:
+            next_year, next_month = year + 1, 1
+        else:
+            next_year, next_month = year, month + 1
+            
+        end_date = f"{next_year:04d}-{next_month:02d}-01 00:00:00"
+    except ValueError:
+        return "Invalid month format. Use YYYY-MM", 400
+
+    entries = db.get_entries(start_date=start_date, end_date=end_date)
+    
+    import io
+    output = io.StringIO()
+    
+    total_hours = 0.0
+    title_hours = {}
+    
+    month_obj = datetime.strptime(month_str, '%Y-%m')
+    month_display = month_obj.strftime('%B %Y')
+    
+    output.write("Tomer Barak - AI R&D\n")
+    output.write("ID: 200660397\n")
+    output.write("AI Advisor for Edmond and Lily Safra Center for Brain Sciences\n")
+    output.write("=" * 40 + "\n\n")
+    
+    output.write(f"TimeTrack Report: {month_display}\n")
+    output.write("-" * 40 + "\n\n")
+    
+    for e in entries:
+        start = datetime.strptime(e['start_time'], '%Y-%m-%d %H:%M:%S')
+        end = datetime.strptime(e['end_time'], '%Y-%m-%d %H:%M:%S')
+        hours = (end - start).total_seconds() / 3600
+        
+        t_name = e['title_name']
+        title_hours[t_name] = title_hours.get(t_name, 0.0) + hours
+        total_hours += hours
+        
+    output.write("--- SUMMARY ---\n")
+    output.write(f"Total Hours: {round(total_hours, 2)}h\n\n")
+    
+    if title_hours:
+        output.write("By Title:\n")
+        # Sort descending by hours
+        for t, h in sorted(title_hours.items(), key=lambda x: x[1], reverse=True):
+            output.write(f"  - {t}: {round(h, 2)}h\n")
+    
+    output.write("\n--- DETAILS ---\n")
+    if not entries:
+        output.write("No entries found for this month.\n")
+    else:
+        for e in reversed(entries):  # Sort oldest first for presentation
+            start = datetime.strptime(e['start_time'], '%Y-%m-%d %H:%M:%S')
+            end = datetime.strptime(e['end_time'], '%Y-%m-%d %H:%M:%S')
+            hours = round((end - start).total_seconds() / 3600, 2)
+            
+            start_str = start.strftime('%d-%m-%Y %H:%M')
+            end_str = end.strftime('%d-%m-%Y %H:%M')
+            output.write(f"[{start_str} to {end_str}] {e['title_name']} : {hours}h\n")
+        
+    return Response(
+        output.getvalue(),
+        mimetype="text/plain",
+        headers={"Content-disposition": f"attachment; filename=timetrack_report_{month_str}.txt"}
+    )
+
+
 
 
 # ── Boot ────────────────────────────────────────────────────

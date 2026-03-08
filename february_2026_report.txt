@@ -1,0 +1,46 @@
+Tomer Barak - AI R&D
+ID: 200660397
+AI Advisor for Edmond and Lily Safra Center for Brain Sciences
+========================================
+
+TimeTrack Report: February 2026
+----------------------------------------
+
+--- SUMMARY ---
+Total Hours: 79.93h
+
+By Title:
+  - Counseling: 47.8h
+  - Infrastructure: 32.12h
+
+--- DETAILS ---
+[03-02-2026 13:00 to 03-02-2026 15:00] Counseling : 2.0h
+[04-02-2026 13:00 to 04-02-2026 15:00] Counseling : 2.0h
+[08-02-2026 12:00 to 08-02-2026 13:30] Counseling : 1.5h
+[08-02-2026 15:00 to 08-02-2026 17:30] Counseling : 2.5h
+[09-02-2026 09:00 to 09-02-2026 11:00] Counseling : 2.0h
+[09-02-2026 11:30 to 09-02-2026 12:30] Counseling : 1.0h
+[10-02-2026 09:15 to 10-02-2026 11:15] Counseling : 2.0h
+[15-02-2026 00:00 to 15-02-2026 20:00] Infrastructure : 20.0h
+[15-02-2026 14:00 to 15-02-2026 14:30] Counseling : 0.5h
+[16-02-2026 01:00 to 16-02-2026 03:00] Counseling : 2.0h
+[16-02-2026 03:00 to 16-02-2026 06:00] Infrastructure : 3.0h
+[16-02-2026 11:00 to 16-02-2026 12:00] Counseling : 1.0h
+[16-02-2026 12:35 to 16-02-2026 14:44] Infrastructure : 2.15h
+[17-02-2026 09:34 to 17-02-2026 09:57] Counseling : 0.39h
+[17-02-2026 09:57 to 17-02-2026 10:40] Infrastructure : 0.71h
+[17-02-2026 10:40 to 17-02-2026 11:10] Counseling : 0.5h
+[17-02-2026 11:24 to 17-02-2026 12:01] Infrastructure : 0.6h
+[17-02-2026 12:05 to 17-02-2026 13:18] Infrastructure : 1.21h
+[17-02-2026 15:19 to 17-02-2026 15:46] Infrastructure : 0.45h
+[17-02-2026 16:00 to 17-02-2026 17:00] Counseling : 1.0h
+[18-02-2026 09:00 to 18-02-2026 12:30] Counseling : 3.5h
+[18-02-2026 13:27 to 18-02-2026 15:12] Counseling : 1.74h
+[18-02-2026 16:20 to 18-02-2026 17:30] Counseling : 1.17h
+[19-02-2026 09:00 to 19-02-2026 17:00] Counseling : 8.0h
+[22-02-2026 09:00 to 22-02-2026 17:00] Counseling : 8.0h
+[23-02-2026 13:00 to 23-02-2026 15:00] Infrastructure : 2.0h
+[24-02-2026 10:00 to 24-02-2026 11:00] Counseling : 1.0h
+[24-02-2026 14:00 to 24-02-2026 17:30] Counseling : 3.5h
+[25-02-2026 10:30 to 25-02-2026 13:00] Counseling : 2.5h
+[26-02-2026 13:00 to 26-02-2026 15:00] Infrastructure : 2.0h

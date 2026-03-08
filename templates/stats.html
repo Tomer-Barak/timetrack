@@ -125,6 +125,23 @@ Time')] %}
 </div>
 {% endfor %}
 
+<!-- Export Report -->
+<div class="card mb-2">
+    <div class="card-header"><i class="fas fa-file-export"></i> Export Report</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+        <div>
+            <div style="font-weight:600;margin-bottom:.25rem;">Download Monthly Activity</div>
+            <div class="text-muted text-sm">Export all time entries for a specific month as a TXT file.</div>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+            <input type="month" id="export-month" class="form-control" style="width:auto;" value="{{ current_month }}">
+            <button class="btn btn-primary" onclick="exportReport()" style="white-space:nowrap;">
+                <i class="fas fa-download"></i> Download TXT
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Clear All Data -->
 <div class="card mb-2" style="border-color:#ef444444;">
     <div class="card-header" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i> Danger Zone</div>
@@ -156,6 +173,15 @@ Time')] %}
         } else {
             alert('Failed to clear data.');
         }
+    }
+
+    function exportReport() {
+        const month = document.getElementById('export-month').value;
+        if (!month) {
+            alert('Please select a month to export.');
+            return;
+        }
+        window.location.href = `/api/report/export?month=${month}`;
     }
 </script>
 {% endblock %}
