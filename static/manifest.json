@@ -1,11 +1,11 @@
 {
     "name": "TimeTrack – Working Hours",
     "short_name": "TimeTrack",
-    "description": "Track your working hours across counseling and development",
+    "description": "Track your working hours across consulting and infrastructure",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#0f172a",
-    "theme_color": "#0f172a",
+    "background_color": "#f7f7f7",
+    "theme_color": "#f7f7f7",
     "orientation": "portrait-primary",
     "scope": "/",
     "icons": [
@@ -24,15 +24,15 @@
     ],
     "shortcuts": [
         {
-            "name": "Statistics",
-            "short_name": "Stats",
-            "url": "/stats",
+            "name": "Time Log",
+            "short_name": "Log",
+            "url": "/",
             "icons": [{"src": "/static/icons/icon-192x192.png", "sizes": "192x192"}]
         },
         {
-            "name": "Time Log",
-            "short_name": "Log",
-            "url": "/log",
+            "name": "Statistics",
+            "short_name": "Stats",
+            "url": "/stats",
             "icons": [{"src": "/static/icons/icon-192x192.png", "sizes": "192x192"}]
         }
     ],

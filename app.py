@@ -19,6 +19,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+@app.context_processor
+def inject_template_config():
+    return {
+        'category_meta': db.CATEGORY_META,
+        'ordered_categories': db.ORDERED_CATEGORIES,
+        'category_label': db.category_label,
+        'category_color': db.category_color,
+        'monthly_max_hours': db.MONTHLY_MAX_HOURS,
+        'monthly_current_cap_hours': db.MONTHLY_CURRENT_CAP_HOURS,
+    }
+
+
 # ── PWA boilerplate ─────────────────────────────────────────
 
 @app.route('/manifest.json')
@@ -46,7 +58,16 @@ def add_no_cache_headers(response):
 
 @app.route('/')
 def index():
-    """Main dashboard – timer + recent log + stats overview."""
+    """Main log and manual-entry page."""
+    entries = db.get_recent_entries(200)
+    titles = db.get_titles()
+    stats = db.get_stats()
+    return render_template('log.html', entries=entries, titles=titles, stats=stats)
+
+
+@app.route('/timer')
+def timer_page():
+    """Timer dashboard with quick stats overview."""
     titles = db.get_titles()
     active = db.get_active_entry()
     recent = db.get_recent_entries(20)
@@ -78,10 +99,8 @@ def stats_page():
 
 @app.route('/log')
 def log_page():
-    """Full time entry log with edit/delete."""
-    entries = db.get_recent_entries(200)
-    titles = db.get_titles()
-    return render_template('log.html', entries=entries, titles=titles)
+    """Legacy log URL; the log is now the homepage."""
+    return redirect(url_for('index'))
 
 
 @app.route('/titles')
@@ -157,7 +176,7 @@ def api_add_title():
     data = request.get_json()
     name = data.get('name', '').strip()
     category = data.get('category', 'other')
-    color = data.get('color', '#6366f1')
+    color = data.get('color', '#9f4f35')
     if not name:
         return jsonify({'error': 'name required'}), 400
     try:
@@ -172,7 +191,7 @@ def api_update_title(title_id):
     data = request.get_json()
     name = data.get('name', '').strip()
     category = data.get('category', 'other')
-    color = data.get('color', '#6366f1')
+    color = data.get('color', '#9f4f35')
     if not name:
         return jsonify({'error': 'name required'}), 400
     db.update_title(title_id, name, category, color)
@@ -223,8 +242,9 @@ def api_export_report():
     import io
     output = io.StringIO()
     
-    total_hours = 0.0
-    title_hours = {}
+    total_seconds = 0.0
+    title_seconds = {}
+    category_seconds = {}
     
     month_obj = datetime.strptime(month_str, '%Y-%m')
     month_display = month_obj.strftime('%B %Y')
@@ -240,20 +260,37 @@ def api_export_report():
     for e in entries:
         start = datetime.strptime(e['start_time'], '%Y-%m-%d %H:%M:%S')
         end = datetime.strptime(e['end_time'], '%Y-%m-%d %H:%M:%S')
-        hours = (end - start).total_seconds() / 3600
+        seconds = (end - start).total_seconds()
         
         t_name = e['title_name']
-        title_hours[t_name] = title_hours.get(t_name, 0.0) + hours
-        total_hours += hours
+        title_seconds[t_name] = title_seconds.get(t_name, 0.0) + seconds
+        category = e['category']
+        category_seconds[category] = category_seconds.get(category, 0.0) + seconds
+        total_seconds += seconds
         
     output.write("--- SUMMARY ---\n")
-    output.write(f"Total Hours: {round(total_hours, 2)}h\n\n")
+    output.write(f"Total Hours: {round(total_seconds / 3600, 2)}h\n\n")
     
-    if title_hours:
+    if category_seconds:
+        output.write("By Category:\n")
+        shown_categories = set()
+        for cat in db.ORDERED_CATEGORIES:
+            if cat == 'other' and cat not in category_seconds:
+                continue
+            seconds = category_seconds.get(cat, 0.0)
+            output.write(f"  - {db.category_label(cat)}: {round(seconds / 3600, 2)}h\n")
+            shown_categories.add(cat)
+        for cat, seconds in sorted(category_seconds.items()):
+            if cat in shown_categories:
+                continue
+            output.write(f"  - {db.category_label(cat)}: {round(seconds / 3600, 2)}h\n")
+        output.write("\n")
+
+    if title_seconds:
         output.write("By Title:\n")
         # Sort descending by hours
-        for t, h in sorted(title_hours.items(), key=lambda x: x[1], reverse=True):
-            output.write(f"  - {t}: {round(h, 2)}h\n")
+        for t, seconds in sorted(title_seconds.items(), key=lambda x: x[1], reverse=True):
+            output.write(f"  - {t}: {round(seconds / 3600, 2)}h\n")
     
     output.write("\n--- DETAILS ---\n")
     if not entries:

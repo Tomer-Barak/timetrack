@@ -10,6 +10,56 @@ from contextlib import contextmanager
 
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'timetrack.db')
 
+MONTHLY_MAX_HOURS = 160
+MONTHLY_CURRENT_CAP_HOURS = 120
+
+CATEGORY_META = {
+    'counseling': {
+        'label': 'Consulting',
+        'short_label': 'Consulting',
+        'color': '#7a3f55',
+        'icon': 'comments',
+    },
+    'development': {
+        'label': 'Infrastructure',
+        'short_label': 'Infra',
+        'color': '#53646c',
+        'icon': 'server',
+    },
+    'mixed': {
+        'label': 'Consulting + infrastructure',
+        'short_label': 'Combined',
+        'color': '#8a6a3a',
+        'icon': 'layer-group',
+    },
+    'other': {
+        'label': 'Other',
+        'short_label': 'Other',
+        'color': '#7b8794',
+        'icon': 'tag',
+    },
+}
+ORDERED_CATEGORIES = ('counseling', 'development', 'mixed', 'other')
+WEEKEND_DAYS = (4, 5)  # Friday and Saturday in Python's Monday-based calendar.
+
+
+def category_meta(category):
+    """Return display metadata for a stored category value."""
+    return CATEGORY_META.get(category, {
+        'label': category.replace('_', ' ').title(),
+        'short_label': category.replace('_', ' ').title(),
+        'color': '#7b8794',
+        'icon': 'tag',
+    })
+
+
+def category_label(category):
+    return category_meta(category)['label']
+
+
+def category_color(category):
+    return category_meta(category)['color']
+
 
 @contextmanager
 def get_db():
@@ -36,7 +86,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
                 category TEXT NOT NULL DEFAULT 'other',
-                color TEXT NOT NULL DEFAULT '#6366f1',
+                color TEXT NOT NULL DEFAULT '#9f4f35',
                 created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
             )
         ''')
@@ -54,8 +104,9 @@ def init_db():
         cursor = conn.execute("SELECT COUNT(*) FROM titles")
         if cursor.fetchone()[0] == 0:
             defaults = [
-                ('Counseling', 'counseling', '#8b5cf6'),
-                ('Infrastructure', 'development', '#06b6d4'),
+                ('Consulting', 'counseling', CATEGORY_META['counseling']['color']),
+                ('Infrastructure', 'development', CATEGORY_META['development']['color']),
+                ('Consulting + Infrastructure', 'mixed', CATEGORY_META['mixed']['color']),
             ]
             conn.executemany(
                 "INSERT INTO titles (name, category, color) VALUES (?, ?, ?)",
@@ -73,7 +124,7 @@ def get_titles():
         ).fetchall()]
 
 
-def add_title(name, category, color='#6366f1'):
+def add_title(name, category, color='#9f4f35'):
     """Add a new title."""
     with get_db() as conn:
         conn.execute(
@@ -219,6 +270,30 @@ def _calc_hours(entries):
     return round(total, 2)
 
 
+def _calc_split(by_category):
+    """Return 50/50 split stats, excluding mixed/combined hours."""
+    consulting = by_category.get('counseling', 0)
+    infrastructure = by_category.get('development', 0)
+    mixed = by_category.get('mixed', 0)
+    split_total = round(consulting + infrastructure, 2)
+    if split_total:
+        consulting_pct = round(consulting / split_total * 100, 1)
+        infrastructure_pct = round(infrastructure / split_total * 100, 1)
+    else:
+        consulting_pct = 0
+        infrastructure_pct = 0
+
+    return {
+        'consulting': consulting,
+        'infrastructure': infrastructure,
+        'mixed': mixed,
+        'split_total': split_total,
+        'consulting_pct': consulting_pct,
+        'infrastructure_pct': infrastructure_pct,
+        'balance_delta': round(consulting - infrastructure, 2),
+    }
+
+
 def _get_israeli_week_range(dt=None):
     """Return (sunday, next_sunday) for the Israeli week containing dt."""
     if dt is None:
@@ -242,6 +317,53 @@ def _get_month_range(dt=None):
     else:
         next_first = first.replace(month=first.month + 1)
     return first, next_first
+
+
+def calculate_month_pace(logged_hours, dt=None, target_hours=MONTHLY_CURRENT_CAP_HOURS):
+    """Compare logged hours with a target prorated over Sun-Thu workdays."""
+    if dt is None:
+        dt = datetime.now()
+
+    month_start, next_month = _get_month_range(dt)
+    workdays = []
+    day = month_start.date()
+    while day < next_month.date():
+        if day.weekday() not in WEEKEND_DAYS:
+            workdays.append(day)
+        day += timedelta(days=1)
+
+    today = dt.date()
+    elapsed_workdays = sum(day <= today for day in workdays)
+    remaining_workdays = sum(day >= today for day in workdays)
+    total_workdays = len(workdays)
+
+    expected_hours = target_hours * elapsed_workdays / total_workdays
+    hours_delta = logged_hours - expected_hours
+    remaining_hours = max(target_hours - logged_hours, 0)
+    required_daily_hours = (
+        remaining_hours / remaining_workdays if remaining_workdays else remaining_hours
+    )
+
+    if hours_delta > 1:
+        status = 'ahead'
+    elif hours_delta < -1:
+        status = 'behind'
+    else:
+        status = 'on_track'
+
+    return {
+        'status': status,
+        'target_hours': target_hours,
+        'expected_hours': round(expected_hours, 1),
+        'hours_delta': round(abs(hours_delta), 1),
+        'remaining_hours': round(remaining_hours, 1),
+        'required_daily_hours': round(required_daily_hours, 1),
+        'total_workdays': total_workdays,
+        'elapsed_workdays': elapsed_workdays,
+        'remaining_workdays': remaining_workdays,
+        'expected_progress_pct': round(elapsed_workdays / total_workdays * 100, 1),
+        'logged_progress_pct': round(min(logged_hours / target_hours * 100, 100), 1),
+    }
 
 
 def get_stats():
@@ -294,6 +416,8 @@ def get_stats():
             'total': total_hours,
             'by_category': by_category,
             'by_title': by_title,
+            'split': _calc_split(by_category),
         }
 
+    stats['month']['pace'] = calculate_month_pace(stats['month']['total'], now)
     return stats

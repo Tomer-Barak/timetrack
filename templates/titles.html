@@ -1,10 +1,12 @@
 {% extends "base.html" %}
-{% block title %}TimeTrack – Titles{% endblock %}
+{% block title %}TimeTrack - Titles{% endblock %}
 
 {% block content %}
-<div class="section-header">
-    <h1 class="section-title"><i class="fas fa-tags" style="color:var(--accent);margin-right:.5rem;"></i>Manage Titles
-    </h1>
+<div class="section-header page-header">
+    <div>
+        <div class="section-eyebrow">Configuration</div>
+        <h1 class="section-title">Titles</h1>
+    </div>
     <button class="btn btn-primary" onclick="openAddModal()"><i class="fas fa-plus"></i> Add Title</button>
 </div>
 
@@ -16,35 +18,56 @@
 {% if cats[t.category].append(t) %}{% endif %}
 {% endfor %}
 
-{% for cat in ['counseling', 'development', 'other'] %}
-{% if cat in cats %}
-<div class="card mb-2">
-    <div class="card-header">
-        <i class="fas fa-{{ 'comments' if cat=='counseling' else 'code' if cat=='development' else 'tag' }}"></i>
-        {{ cat | capitalize }}
-        <span class="cat-badge {{ cat }}" style="margin-left:.5rem;">{{ cats[cat]|length }}</span>
-    </div>
-    <div class="title-grid">
-        {% for t in cats[cat] %}
-        <div class="title-card">
-            <div class="tc-color" style="background:{{ t.color }};">{{ t.name[0] }}</div>
-            <div class="tc-info">
-                <div class="tc-name">{{ t.name }}</div>
-                <div class="tc-cat">{{ t.category }}</div>
+<div class="titles-workspace">
+    <aside class="card title-summary-card">
+        <div class="card-header"><i class="fas fa-layer-group"></i> Categories</div>
+        <div class="entry-metrics">
+            {% for cat in ordered_categories %}
+            {% if cat in cats %}
+            <div>
+                <span>{{ category_label(cat) }}</span>
+                <strong>{{ cats[cat]|length }}</strong>
             </div>
-            <div class="tc-actions">
-                <button class="btn btn-ghost" style="padding:.35rem .5rem;font-size:.75rem;"
-                    onclick="openEditTitleModal({{ t.id }}, '{{ t.name }}', '{{ t.category }}', '{{ t.color }}')"><i
-                        class="fas fa-pen"></i></button>
-                <button class="btn btn-danger" style="padding:.35rem .5rem;font-size:.75rem;"
-                    onclick="deleteTitle({{ t.id }})"><i class="fas fa-trash"></i></button>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </aside>
+
+    <section class="titles-list">
+        {% for cat in ordered_categories %}
+        {% if cat in cats %}
+        <div class="card mb-2">
+            <div class="section-header compact">
+                <div class="card-header">
+                    <i class="fas fa-{{ category_meta[cat]['icon'] if cat in category_meta else 'tag' }}"></i>
+                    {{ category_label(cat) }}
+                </div>
+                <span class="entry-count">{{ cats[cat]|length }} titles</span>
+            </div>
+            <div class="title-table">
+                {% for t in cats[cat] %}
+                <div class="title-row">
+                    <div class="title-row-main">
+                        <span class="title-row-dot" style="background:{{ category_color(t.category) }};"></span>
+                        <div>
+                            <div class="tc-name">{{ t.name }}</div>
+                            <div class="tc-cat">{{ category_label(t.category) }}</div>
+                        </div>
+                    </div>
+                    <div class="tc-actions">
+                        <button class="btn btn-ghost"
+                            onclick="openEditTitleModal({{ t.id }}, '{{ t.name }}', '{{ t.category }}', '{{ t.color }}')"><i
+                                class="fas fa-pen"></i> Edit</button>
+                        <button class="btn btn-danger" onclick="deleteTitle({{ t.id }})"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
         </div>
+        {% endif %}
         {% endfor %}
-    </div>
+    </section>
 </div>
-{% endif %}
-{% endfor %}
 
 <!-- Add Title Modal -->
 <div class="modal-backdrop" id="add-modal">
@@ -57,14 +80,15 @@
         <div class="form-group">
             <label for="add-category">Category</label>
             <select class="form-control" id="add-category">
-                <option value="counseling">Counseling</option>
-                <option value="development">Development</option>
+                <option value="counseling">Consulting</option>
+                <option value="development">Infrastructure</option>
+                <option value="mixed">Consulting + Infrastructure</option>
                 <option value="other">Other</option>
             </select>
         </div>
         <div class="form-group">
             <label for="add-color">Color</label>
-            <input type="color" class="form-control" id="add-color" value="#6366f1" style="height:42px;padding:4px;">
+            <input type="color" class="form-control" id="add-color" value="#9f4f35" style="height:42px;padding:4px;">
         </div>
         <div class="btn-row">
             <button class="btn btn-ghost" onclick="closeAddModal()">Cancel</button>
@@ -85,8 +109,9 @@
         <div class="form-group">
             <label for="edit-title-category">Category</label>
             <select class="form-control" id="edit-title-category">
-                <option value="counseling">Counseling</option>
-                <option value="development">Development</option>
+                <option value="counseling">Consulting</option>
+                <option value="development">Infrastructure</option>
+                <option value="mixed">Consulting + Infrastructure</option>
                 <option value="other">Other</option>
             </select>
         </div>
@@ -151,7 +176,6 @@
         if (res.ok) window.location.reload();
     }
 
-    // Close modals on backdrop click
     document.getElementById('add-modal').addEventListener('click', function (e) { if (e.target === this) closeAddModal(); });
     document.getElementById('edit-title-modal').addEventListener('click', function (e) { if (e.target === this) closeEditTitleModal(); });
 </script>

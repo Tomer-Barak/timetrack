@@ -2,74 +2,96 @@
 {% block title %}TimeTrack – Log{% endblock %}
 
 {% block content %}
-<div class="section-header">
-    <h1 class="section-title"><i class="fas fa-list" style="color:var(--accent);margin-right:.5rem;"></i>Time Log</h1>
-    <button class="btn btn-primary" onclick="openManualModal()"><i class="fas fa-plus"></i> Add Entry</button>
+<div class="section-header page-header">
+    <div>
+        <div class="section-eyebrow">Activity</div>
+        <h1 class="section-title">Time Log</h1>
+    </div>
+    <a href="{{ url_for('stats_page') }}" class="btn btn-ghost"><i class="fas fa-chart-bar"></i> Stats</a>
 </div>
 
-<div class="card">
-    {% if entries %}
-    <ul class="entry-list" id="entry-list">
-        {% for e in entries %}
-        <li class="entry-item" id="entry-{{ e.id }}">
-            <div class="entry-color" style="background:{{ e.color }};"></div>
-            <div class="entry-info">
-                <div class="entry-title">{{ e.title_name }}</div>
-                <div class="entry-meta">
-                    <span><i class="far fa-calendar"></i> {{ e.start_time[:10] }}</span>
-                    <span><i class="far fa-clock"></i> {{ e.start_time[11:16] }} – {{ e.end_time[11:16] }}</span>
-                    <span class="cat-badge {{ e.category }}">{{ e.category }}</span>
+<div class="log-workspace">
+    <aside class="card quick-entry-card">
+        <div class="card-header"><i class="fas fa-plus"></i> Add Entry</div>
+        <form id="manual-form" class="quick-entry-form">
+            <div class="form-group">
+                <label for="manual-title">Title</label>
+                <select class="form-control" id="manual-title">
+                    {% for t in titles %}
+                    <option value="{{ t.id }}">{{ t.name }} ({{ category_label(t.category) }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="manual-date">Date</label>
+                <input type="date" class="form-control" id="manual-date">
+            </div>
+            <div class="time-fields">
+                <div class="form-group">
+                    <label for="manual-start">Start</label>
+                    <input type="time" class="form-control" id="manual-start">
+                </div>
+                <div class="form-group">
+                    <label for="manual-end">End</label>
+                    <input type="time" class="form-control" id="manual-end">
                 </div>
             </div>
-            <div class="entry-duration" style="color:{{ e.color }};">
-                <span class="dur" data-start="{{ e.start_time }}" data-end="{{ e.end_time }}"></span>
-            </div>
-            <div class="entry-actions">
-                <button onclick="openEditModal({{ e.id }}, {{ e.title_id }}, '{{ e.start_time }}', '{{ e.end_time }}')"
-                    title="Edit"><i class="fas fa-pen"></i></button>
-                <button class="delete" onclick="deleteEntry({{ e.id }})" title="Delete"><i
-                        class="fas fa-trash"></i></button>
-            </div>
-        </li>
-        {% endfor %}
-    </ul>
-    {% else %}
-    <div class="empty-state">
-        <i class="fas fa-inbox"></i>
-        <p>No time entries recorded yet.</p>
-    </div>
-    {% endif %}
-</div>
+            <button class="btn btn-primary btn-full" type="submit"><i class="fas fa-check"></i> Save Entry</button>
+        </form>
 
-<!-- Manual Entry Modal -->
-<div class="modal-backdrop" id="manual-modal">
-    <div class="modal-box">
-        <div class="modal-title">Add Manual Entry</div>
-        <div class="form-group">
-            <label for="manual-title">Title</label>
-            <select class="form-control" id="manual-title">
-                {% for t in titles %}
-                <option value="{{ t.id }}">{{ t.name }} ({{ t.category }})</option>
-                {% endfor %}
-            </select>
+        <div class="entry-metrics">
+            <div>
+                <span>Today</span>
+                <strong>{{ stats.today.total }}h</strong>
+            </div>
+            <div>
+                <span>This Month</span>
+                <strong>{{ stats.month.total }}h</strong>
+            </div>
+            <div>
+                <span>Split</span>
+                <strong>{{ stats.month.split.consulting_pct }}% / {{ stats.month.split.infrastructure_pct }}%</strong>
+            </div>
         </div>
-        <div class="form-group">
-            <label for="manual-date">Date</label>
-            <input type="date" class="form-control" id="manual-date">
+    </aside>
+
+    <section class="card log-card">
+        <div class="section-header compact">
+            <div class="card-header"><i class="fas fa-list"></i> Recent Entries</div>
+            <span class="entry-count">{{ entries|length }} entries</span>
         </div>
-        <div class="form-group">
-            <label for="manual-start">Start Time</label>
-            <input type="time" class="form-control" id="manual-start">
+        {% if entries %}
+        <ul class="entry-list" id="entry-list">
+            {% for e in entries %}
+            <li class="entry-item" id="entry-{{ e.id }}">
+                <div class="entry-color" style="background:{{ category_color(e.category) }};"></div>
+                <div class="entry-info">
+                    <div class="entry-title">{{ e.title_name }}</div>
+                    <div class="entry-meta">
+                        <span><i class="far fa-calendar"></i> {{ e.start_time[:10] }}</span>
+                        <span><i class="far fa-clock"></i> {{ e.start_time[11:16] }}-{{ e.end_time[11:16] }}</span>
+                        <span class="cat-badge {{ e.category }}">{{ category_label(e.category) }}</span>
+                    </div>
+                </div>
+                <div class="entry-duration" style="color:{{ category_color(e.category) }};">
+                    <span class="dur" data-start="{{ e.start_time }}" data-end="{{ e.end_time }}"></span>
+                </div>
+                <div class="entry-actions">
+                    <button onclick="openEditModal({{ e.id }}, {{ e.title_id }}, '{{ e.start_time }}', '{{ e.end_time }}')"
+                        title="Edit"><i class="fas fa-pen"></i></button>
+                    <button class="delete" onclick="deleteEntry({{ e.id }})" title="Delete"><i
+                            class="fas fa-trash"></i></button>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <p>No time entries recorded yet.</p>
         </div>
-        <div class="form-group">
-            <label for="manual-end">End Time</label>
-            <input type="time" class="form-control" id="manual-end">
-        </div>
-        <div class="btn-row">
-            <button class="btn btn-ghost" onclick="closeManualModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="saveManualEntry()">Save</button>
-        </div>
-    </div>
+        {% endif %}
+    </section>
 </div>
 
 <!-- Edit Entry Modal -->
@@ -81,7 +103,7 @@
             <label for="edit-title">Title</label>
             <select class="form-control" id="edit-title">
                 {% for t in titles %}
-                <option value="{{ t.id }}">{{ t.name }} ({{ t.category }})</option>
+                <option value="{{ t.id }}">{{ t.name }} ({{ category_label(t.category) }})</option>
                 {% endfor %}
             </select>
         </div>
@@ -126,15 +148,18 @@
         el.textContent = fmtHours((e - s) / 1000);
     });
 
+    function localDateValue(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+    document.getElementById('manual-date').value = localDateValue(new Date());
+
     // Add manual entry
-    function openManualModal() {
-        document.getElementById('manual-date').value = new Date().toISOString().slice(0, 10);
-        document.getElementById('manual-modal').classList.add('open');
-    }
-    function closeManualModal() {
-        document.getElementById('manual-modal').classList.remove('open');
-    }
-    async function saveManualEntry() {
+    document.getElementById('manual-form').addEventListener('submit', saveManualEntry);
+    async function saveManualEntry(event) {
+        event.preventDefault();
         const titleId = document.getElementById('manual-title').value;
         const date = document.getElementById('manual-date').value;
         const startTime = document.getElementById('manual-start').value;
@@ -187,7 +212,6 @@
     }
 
     // Close modals on backdrop click
-    document.getElementById('manual-modal').addEventListener('click', function (e) { if (e.target === this) closeManualModal(); });
     document.getElementById('edit-modal').addEventListener('click', function (e) { if (e.target === this) closeEditModal(); });
 </script>
 {% endblock %}

@@ -1,15 +1,17 @@
 # TimeTrack – Working Hours Tracker
 
-A Progressive Web App (PWA) built with Flask and SQLite to track working hours across different categories (Counseling, Infrastructure, etc.).
+A Progressive Web App (PWA) built with Flask and SQLite to track working hours across consulting, infrastructure, and combined consulting + infrastructure work.
 
 ## Features
 
+- **Time Log**: Homepage for adding, editing, and reviewing manual entries.
 - **Timer Dashboard**: Real-time clock with start/stop functionality.
 - **PWA Ready**: Installable on mobile devices (Android/iOS) and desktop.
 - **Statistics**: View daily, weekly, and monthly totals with category breakdowns.
 - **Manual Entries**: Add or edit entries if you forgot to start the timer.
-- **Dark Theme**: Sleek, modern interface using glassmorphism aesthetics.
-- **Goal Tracking**: Monitor progress towards monthly targets (e.g., 80 hours/month).
+- **Professional UI**: Light, restrained interface for quick operational use.
+- **Goal Tracking**: Monitor progress towards a 160-hour monthly scale and a 50/50 consulting/infrastructure split.
+- **Workday Pace**: Compare logged hours with the 120-hour scope prorated across Sunday-Thursday workdays.
 
 ## Tech Stack
 

@@ -1,4 +1,4 @@
-const VERSION = 'v1';
+const VERSION = 'v6';
 const STATIC_CACHE = `timetrack-static-${VERSION}`;
 const RUNTIME_CACHE = `timetrack-runtime-${VERSION}`;
 
