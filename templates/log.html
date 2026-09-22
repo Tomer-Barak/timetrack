@@ -18,7 +18,8 @@
                 <label for="manual-title">Title</label>
                 <select class="form-control" id="manual-title">
                     {% for t in titles %}
-                    <option value="{{ t.id }}">{{ t.name }} ({{ category_label(t.category) }})</option>
+                    {% set q = title_qualifier(t.name, t.category) %}
+                <option value="{{ t.id }}">{{ t.name }}{% if q %} ({{ q }}){% endif %}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -103,7 +104,8 @@
             <label for="edit-title">Title</label>
             <select class="form-control" id="edit-title">
                 {% for t in titles %}
-                <option value="{{ t.id }}">{{ t.name }} ({{ category_label(t.category) }})</option>
+                {% set q = title_qualifier(t.name, t.category) %}
+                <option value="{{ t.id }}">{{ t.name }}{% if q %} ({{ q }}){% endif %}</option>
                 {% endfor %}
             </select>
         </div>

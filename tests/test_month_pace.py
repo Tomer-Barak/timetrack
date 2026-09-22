@@ -6,18 +6,15 @@ import database
 
 class MonthPaceTests(unittest.TestCase):
     def test_prorates_target_over_israeli_workdays(self):
-        pace = database.calculate_month_pace(
-            75.5,
-            datetime(2026, 7, 20, 8, 0),
-            target_hours=120,
-        )
+        pace = database.calculate_month_pace(101.0, datetime(2026, 7, 20, 8, 0))
 
+        self.assertEqual(pace['target_hours'], 160)
         self.assertEqual(pace['total_workdays'], 22)
         self.assertEqual(pace['elapsed_workdays'], 14)
         self.assertEqual(pace['remaining_workdays'], 9)
-        self.assertEqual(pace['expected_hours'], 76.4)
-        self.assertEqual(pace['hours_delta'], 0.9)
-        self.assertEqual(pace['required_daily_hours'], 4.9)
+        self.assertEqual(pace['expected_hours'], 101.8)
+        self.assertEqual(pace['hours_delta'], 0.8)
+        self.assertEqual(pace['required_daily_hours'], 6.6)
         self.assertEqual(pace['status'], 'on_track')
 
     def test_weekend_is_not_counted_as_workday(self):
@@ -32,11 +29,11 @@ class MonthPaceTests(unittest.TestCase):
     def test_reports_meaningful_ahead_and_behind_deltas(self):
         now = datetime(2026, 7, 20)
 
-        self.assertEqual(database.calculate_month_pace(90, now)['status'], 'ahead')
-        self.assertEqual(database.calculate_month_pace(60, now)['status'], 'behind')
+        self.assertEqual(database.calculate_month_pace(120, now)['status'], 'ahead')
+        self.assertEqual(database.calculate_month_pace(80, now)['status'], 'behind')
 
     def test_completed_target_has_no_remaining_daily_hours(self):
-        pace = database.calculate_month_pace(125, datetime(2026, 7, 31))
+        pace = database.calculate_month_pace(165, datetime(2026, 7, 31))
 
         self.assertEqual(pace['remaining_hours'], 0)
         self.assertEqual(pace['required_daily_hours'], 0)

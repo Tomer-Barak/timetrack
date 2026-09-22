@@ -10,37 +10,92 @@ from contextlib import contextmanager
 
 DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'timetrack.db')
 
-MONTHLY_MAX_HOURS = 160
-MONTHLY_CURRENT_CAP_HOURS = 120
+# Full-time monthly goal. Tomer moved to a full 160h position in September 2026;
+# the previous 120h scope no longer applies.
+MONTHLY_TARGET_HOURS = 160
+
+# Stefano is a finite, all-time engagement. Its hours are tracked separately
+# from the monthly employment target and stop being "remaining" at this cap.
+STEFANO_HOUR_CAP = 32
+SEPARATE_REPORT_CATEGORIES = frozenset({'stefano'})
+
+# Under the current agreement HUJI takes a fixed 50h a month and ELSC gets the rest.
+HUJI_MONTHLY_TARGET_HOURS = 50
 
 CATEGORY_META = {
-    'counseling': {
+    'consulting': {
         'label': 'Consulting',
         'short_label': 'Consulting',
         'color': '#7a3f55',
         'icon': 'comments',
+        'org': 'ELSC',
     },
-    'development': {
+    'infrastructure': {
         'label': 'Infrastructure',
         'short_label': 'Infra',
         'color': '#53646c',
         'icon': 'server',
+        'org': 'ELSC',
     },
     'mixed': {
-        'label': 'Consulting + infrastructure',
+        'label': 'Consulting + Infrastructure',
         'short_label': 'Combined',
         'color': '#8a6a3a',
         'icon': 'layer-group',
+        'org': 'ELSC',
+    },
+    'huji': {
+        'label': 'HUJI',
+        'short_label': 'HUJI',
+        'color': '#3f5f7a',
+        'icon': 'graduation-cap',
+        'org': 'HUJI',
+    },
+    'stefano': {
+        'label': 'Stefano',
+        'short_label': 'Stefano',
+        'color': '#6b5b95',
+        'icon': 'hourglass-half',
+        'org': '',
     },
     'other': {
         'label': 'Other',
         'short_label': 'Other',
         'color': '#7b8794',
         'icon': 'tag',
+        'org': '',
     },
 }
-ORDERED_CATEGORIES = ('counseling', 'development', 'mixed', 'other')
+ORDERED_CATEGORIES = ('consulting', 'infrastructure', 'mixed', 'huji', 'stefano', 'other')
+
+# Category keys used before the September 2026 rename, mapped to their replacement.
+# Both were renamed to match the labels the UI had always shown for them.
+LEGACY_CATEGORIES = {
+    'counseling': 'consulting',
+    'development': 'infrastructure',
+}
+# Full names of the orgs behind the category `org` tags, used in the report header.
+ORG_NAMES = {
+    'ELSC': 'Edmond and Lily Safra Center for Brain Sciences',
+    'HUJI': 'the Hebrew University of Jerusalem',
+}
+
+# Bar colors, kept distinct from the per-category palette.
+ORG_COLORS = {
+    'ELSC': '#9f4f35',
+    'HUJI': '#3f5f7a',
+}
+
+# How the monthly goal is divided between them.
+ORG_MONTHLY_TARGETS = {
+    'ELSC': MONTHLY_TARGET_HOURS - HUJI_MONTHLY_TARGET_HOURS,
+    'HUJI': HUJI_MONTHLY_TARGET_HOURS,
+}
+
 WEEKEND_DAYS = (4, 5)  # Friday and Saturday in Python's Monday-based calendar.
+
+# Bumped whenever a one-off data migration is added; stored in PRAGMA user_version.
+SCHEMA_VERSION = 2
 
 
 def category_meta(category):
@@ -50,6 +105,7 @@ def category_meta(category):
         'short_label': category.replace('_', ' ').title(),
         'color': '#7b8794',
         'icon': 'tag',
+        'org': '',
     })
 
 
@@ -59,6 +115,104 @@ def category_label(category):
 
 def category_color(category):
     return category_meta(category)['color']
+
+
+def category_org(category):
+    """Who the work is for: consulting, infrastructure and combined are all ELSC."""
+    return category_meta(category).get('org', '')
+
+
+def title_qualifier(name, category):
+    """Short parenthetical for a title, never one that just repeats the name.
+
+    The seeded titles are named after their own category ("Consulting" in
+    consulting), so the category alone would read "Consulting (Consulting)".
+    Fall back to the org there, which is the part that actually adds something.
+    """
+    label = category_label(category)
+    org = category_org(category)
+    if label != name:
+        return f'{org} · {label}' if org else label
+    return org if org != name else ''
+
+
+def org_progress(by_category, dt=None):
+    """Per-org progress against each org's slice of the monthly goal.
+
+    Every org with a target gets a row even at zero hours, so both bars are always
+    visible. An org carrying hours but no agreed target (or work filed under no org
+    at all) is appended with target None, so those hours are never silently dropped.
+    """
+    logged = {}
+    for cat, hours in by_category.items():
+        if cat in SEPARATE_REPORT_CATEGORIES:
+            continue
+        org = category_org(cat) or category_label(cat)
+        logged[org] = logged.get(org, 0.0) + hours
+
+    orgs = list(ORG_MONTHLY_TARGETS)
+    orgs += [org for org in logged if org not in ORG_MONTHLY_TARGETS]
+
+    rows = []
+    for org in orgs:
+        hours = round(logged.get(org, 0.0), 2)
+        target = ORG_MONTHLY_TARGETS.get(org)
+        row = {
+            'org': org,
+            'name': ORG_NAMES.get(org, org),
+            'logged': hours,
+            'target': target,
+            'color': ORG_COLORS.get(org, '#7b8794'),
+        }
+        if target:
+            row['pace'] = calculate_month_pace(hours, dt, target_hours=target)
+            row['remaining'] = round(max(target - hours, 0), 2)
+            row['pct'] = round(hours / target * 100, 1)
+        rows.append(row)
+
+    # Bars share one hour scale: the largest target spans the full width and the
+    # others are drawn shorter in proportion. Without this a small target fills
+    # fast and reads as heavier progress than a big one at the same hour count.
+    widest = max((row['target'] for row in rows if row['target']), default=0)
+    for row in rows:
+        if row['target']:
+            row['scale_pct'] = round(row['target'] / widest * 100, 2)
+    return rows
+
+
+def advisor_role_lines():
+    """The "AI Advisor for ..." block of the report header, one org per line."""
+    names = list(ORG_NAMES.values())
+    if not names:
+        return []
+    return [f'AI Advisor for {names[0]}'] + [f'and for {name}' for name in names[1:]]
+
+
+def org_totals(by_category):
+    """Group per-category hours by org, preserving ORDERED_CATEGORIES order.
+
+    Returns [(org, total_hours, [(category, hours), ...]), ...].
+    """
+    by_category = {
+        cat: hours for cat, hours in by_category.items()
+        if cat not in SEPARATE_REPORT_CATEGORIES
+    }
+    ordered = list(ORDERED_CATEGORIES)
+    cats = sorted(
+        by_category,
+        key=lambda c: ordered.index(c) if c in ordered else len(ordered),
+    )
+    groups = []
+    index = {}
+    for cat in cats:
+        org = category_org(cat) or category_label(cat)
+        if org not in index:
+            index[org] = len(groups)
+            groups.append((org, 0.0, []))
+        pos = index[org]
+        name, total, members = groups[pos]
+        groups[pos] = (name, total + by_category[cat], members + [(cat, by_category[cat])])
+    return [(name, round(total, 2), members) for name, total, members in groups]
 
 
 @contextmanager
@@ -104,14 +258,71 @@ def init_db():
         cursor = conn.execute("SELECT COUNT(*) FROM titles")
         if cursor.fetchone()[0] == 0:
             defaults = [
-                ('Consulting', 'counseling', CATEGORY_META['counseling']['color']),
-                ('Infrastructure', 'development', CATEGORY_META['development']['color']),
-                ('Consulting + Infrastructure', 'mixed', CATEGORY_META['mixed']['color']),
+                ('Consulting', 'consulting'),
+                ('Infrastructure', 'infrastructure'),
+                ('Consulting + Infrastructure', 'mixed'),
+                ('HUJI', 'huji'),
+                ('Stefano', 'stefano'),
             ]
             conn.executemany(
                 "INSERT INTO titles (name, category, color) VALUES (?, ?, ?)",
-                defaults
+                [(name, cat, CATEGORY_META[cat]['color']) for name, cat in defaults]
             )
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        else:
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version < 1:
+                _migrate_legacy_categories(conn)
+            if version < 2:
+                _ensure_stefano_title(conn)
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+
+def _migrate_legacy_categories(conn):
+    """Bring pre-September-2026 titles onto the renamed category keys.
+
+    Runs once (guarded by PRAGMA user_version) so it never overwrites names or
+    colors chosen after the move. This is a rename only: the combined
+    "Consulting + Infrastructure" category keeps its own hours, as it always has.
+    """
+    for legacy, current in LEGACY_CATEGORIES.items():
+        conn.execute(
+            "UPDATE titles SET category=? WHERE category=?", (current, legacy)
+        )
+
+    # "Counseling" was the odd one out: the UI has always shown it as "Consulting".
+    renames = [
+        ('Counseling', 'Consulting'),
+        ('Counseling + Infrastructure', 'Consulting + Infrastructure'),
+    ]
+    for old_name, new_name in renames:
+        if conn.execute("SELECT 1 FROM titles WHERE name=?", (new_name,)).fetchone():
+            continue
+        conn.execute(
+            "UPDATE titles SET name=? WHERE name=?", (new_name, old_name)
+        )
+
+    if not conn.execute("SELECT 1 FROM titles WHERE category='huji'").fetchone():
+        conn.execute(
+            "INSERT OR IGNORE INTO titles (name, category, color) VALUES (?, ?, ?)",
+            ('HUJI', 'huji', CATEGORY_META['huji']['color'])
+        )
+
+
+def _ensure_stefano_title(conn):
+    """Create the fixed Stefano title used for the separate capped engagement."""
+    if conn.execute("SELECT 1 FROM titles WHERE category='stefano'").fetchone():
+        return
+    existing = conn.execute("SELECT id FROM titles WHERE name='Stefano'").fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE titles SET category=? WHERE id=?", ('stefano', existing['id'])
+        )
+    else:
+        conn.execute(
+            "INSERT INTO titles (name, category, color) VALUES (?, ?, ?)",
+            ('Stefano', 'stefano', CATEGORY_META['stefano']['color'])
+        )
 
 
 # ── Title CRUD ──────────────────────────────────────────────
@@ -149,44 +360,6 @@ def delete_title(title_id):
 
 
 # ── Time Entry CRUD ────────────────────────────────────────
-
-def get_active_entry():
-    """Return the currently running entry, if any."""
-    with get_db() as conn:
-        row = conn.execute('''
-            SELECT te.*, t.name as title_name, t.category, t.color
-            FROM time_entries te
-            JOIN titles t ON te.title_id = t.id
-            WHERE te.end_time IS NULL
-            ORDER BY te.start_time DESC LIMIT 1
-        ''').fetchone()
-        return dict(row) if row else None
-
-
-def start_entry(title_id):
-    """Start a new time entry. Stops any running entry first."""
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    with get_db() as conn:
-        # Stop any running entries
-        conn.execute(
-            "UPDATE time_entries SET end_time=? WHERE end_time IS NULL",
-            (now,)
-        )
-        conn.execute(
-            "INSERT INTO time_entries (title_id, start_time) VALUES (?, ?)",
-            (title_id, now)
-        )
-
-
-def stop_entry():
-    """Stop the currently running entry."""
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE time_entries SET end_time=? WHERE end_time IS NULL",
-            (now,)
-        )
-
 
 def update_entry(entry_id, title_id, start_time, end_time):
     """Update an existing time entry."""
@@ -271,14 +444,25 @@ def _calc_hours(entries):
 
 
 def _calc_split(by_category):
-    """Return 50/50 split stats, excluding mixed/combined hours."""
-    consulting = by_category.get('counseling', 0)
-    infrastructure = by_category.get('development', 0)
+    """Return the 50/50 consulting/infrastructure balance for the period.
+
+    Combined hours cover both sides at once, so they are halved into each rather
+    than dropped: the balance then reflects every attributable hour. The raw
+    per-category totals stay untouched for the report, which still lists Combined
+    on its own line. HUJI is separate work and stays outside the balance entirely.
+    """
+    consulting = by_category.get('consulting', 0)
+    infrastructure = by_category.get('infrastructure', 0)
     mixed = by_category.get('mixed', 0)
-    split_total = round(consulting + infrastructure, 2)
+    huji = by_category.get('huji', 0)
+
+    half_mixed = mixed / 2
+    consulting_balance = round(consulting + half_mixed, 2)
+    infrastructure_balance = round(infrastructure + half_mixed, 2)
+    split_total = round(consulting_balance + infrastructure_balance, 2)
     if split_total:
-        consulting_pct = round(consulting / split_total * 100, 1)
-        infrastructure_pct = round(infrastructure / split_total * 100, 1)
+        consulting_pct = round(consulting_balance / split_total * 100, 1)
+        infrastructure_pct = round(infrastructure_balance / split_total * 100, 1)
     else:
         consulting_pct = 0
         infrastructure_pct = 0
@@ -287,10 +471,13 @@ def _calc_split(by_category):
         'consulting': consulting,
         'infrastructure': infrastructure,
         'mixed': mixed,
+        'huji': huji,
+        'consulting_balance': consulting_balance,
+        'infrastructure_balance': infrastructure_balance,
         'split_total': split_total,
         'consulting_pct': consulting_pct,
         'infrastructure_pct': infrastructure_pct,
-        'balance_delta': round(consulting - infrastructure, 2),
+        'balance_delta': round(consulting_balance - infrastructure_balance, 2),
     }
 
 
@@ -319,7 +506,7 @@ def _get_month_range(dt=None):
     return first, next_first
 
 
-def calculate_month_pace(logged_hours, dt=None, target_hours=MONTHLY_CURRENT_CAP_HOURS):
+def calculate_month_pace(logged_hours, dt=None, target_hours=MONTHLY_TARGET_HOURS):
     """Compare logged hours with a target prorated over Sun-Thu workdays."""
     if dt is None:
         dt = datetime.now()
@@ -386,7 +573,15 @@ def get_stats():
 
     stats = {}
     for period_name, (sd, ed) in periods.items():
-        entries = get_entries(start_date=sd, end_date=ed)
+        all_entries = get_entries(start_date=sd, end_date=ed)
+        entries = [
+            entry for entry in all_entries
+            if entry['category'] not in SEPARATE_REPORT_CATEGORIES
+        ]
+        separate_entries = [
+            entry for entry in all_entries
+            if entry['category'] in SEPARATE_REPORT_CATEGORIES
+        ]
         # Overall
         total_hours = _calc_hours(entries)
         # By category
@@ -418,6 +613,19 @@ def get_stats():
             'by_title': by_title,
             'split': _calc_split(by_category),
         }
+        stats[period_name]['separate_hours'] = _calc_hours(separate_entries)
 
     stats['month']['pace'] = calculate_month_pace(stats['month']['total'], now)
+    stats['month']['org_progress'] = org_progress(stats['month']['by_category'], now)
+    stefano_logged = stats['total']['separate_hours']
+    stats['stefano'] = {
+        'cap': STEFANO_HOUR_CAP,
+        'logged': stefano_logged,
+        'remaining': round(max(STEFANO_HOUR_CAP - stefano_logged, 0), 2),
+        'pct': round(stefano_logged / STEFANO_HOUR_CAP * 100, 1),
+        'periods': {
+            period: stats[period]['separate_hours']
+            for period in ('today', 'week', 'month', 'total')
+        },
+    }
     return stats

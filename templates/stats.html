@@ -3,9 +3,8 @@
 
 {% block content %}
 {% set month_total = stats.month.total %}
-{% set month_pct = (month_total / monthly_max_hours * 100) | round(1) %}
-{% set current_pct = (month_total / monthly_current_cap_hours * 100) | round(1) %}
-{% set remaining_current = ([monthly_current_cap_hours - month_total, 0] | max) | round(1) %}
+{% set month_pct = (month_total / monthly_target_hours * 100) | round(1) %}
+{% set remaining_to_goal = ([monthly_target_hours - month_total, 0] | max) | round(1) %}
 {% set split = stats.month.split %}
 {% set pace = stats.month.pace %}
 
@@ -21,12 +20,12 @@
     <div class="metric-tile">
         <span>This Month</span>
         <strong>{{ month_total }}h</strong>
-        <small>{{ month_pct }}% of {{ monthly_max_hours }}h full time</small>
+        <small>{{ month_pct }}% of the {{ monthly_target_hours }}h goal</small>
     </div>
     <div class="metric-tile">
-        <span>To Current Scope</span>
-        <strong>{{ remaining_current }}h</strong>
-        <small>{{ current_pct }}% of {{ monthly_current_cap_hours }}h</small>
+        <span>Left To Goal</span>
+        <strong>{{ remaining_to_goal }}h</strong>
+        <small>{{ monthly_target_hours }}h full time, all categories</small>
     </div>
     <div class="metric-tile">
         <span>This Week</span>
@@ -88,6 +87,34 @@
     <div class="pace-note"><i class="fas fa-briefcase"></i> Workdays are Sunday-Thursday; Friday and Saturday are excluded.</div>
 </section>
 
+<section class="card stefano-card">
+    <div class="stefano-card-head">
+        <div>
+            <div class="card-header"><i class="fas fa-hourglass-half"></i> Stefano · Separate Engagement</div>
+            <div class="stefano-total"><strong>{{ stats.stefano.logged }}h</strong> of {{ stats.stefano.cap }}h used</div>
+            <p>This all-time cap is tracked separately and never counts toward the monthly hour report or quota.</p>
+        </div>
+        <a class="btn btn-ghost" href="{{ url_for('api_export_stefano_report') }}">
+            <i class="fas fa-download"></i> Download Stefano Report
+        </a>
+    </div>
+    <div class="stefano-progress">
+        <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" style="width:{{ [stats.stefano.pct, 100] | min }}%;background:{{ category_color('stefano') }};"></div>
+        </div>
+        <div class="stefano-progress-labels">
+            <span>{{ stats.stefano.pct }}% used</span>
+            <strong>{{ stats.stefano.remaining }}h remaining</strong>
+        </div>
+    </div>
+    <div class="stefano-periods">
+        <div><span>Today</span><strong>{{ stats.stefano.periods.today }}h</strong></div>
+        <div><span>This week</span><strong>{{ stats.stefano.periods.week }}h</strong></div>
+        <div><span>This month</span><strong>{{ stats.stefano.periods.month }}h</strong></div>
+        <div><span>All time</span><strong>{{ stats.stefano.periods.total }}h</strong></div>
+    </div>
+</section>
+
 <section class="stats-layout">
     <div class="card stats-analysis-card">
         <div class="card-header"><i class="fas fa-ruler-horizontal"></i> Monthly Capacity</div>
@@ -97,61 +124,90 @@
                 <strong>{{ month_total }}h</strong>
             </div>
             <div>
-                <span>Current scope</span>
-                <strong>{{ monthly_current_cap_hours }}h</strong>
+                <span>Remaining</span>
+                <strong>{{ remaining_to_goal }}h</strong>
             </div>
             <div>
-                <span>Full time</span>
-                <strong>{{ monthly_max_hours }}h</strong>
+                <span>Full-time goal</span>
+                <strong>{{ monthly_target_hours }}h</strong>
             </div>
         </div>
-        <div class="goal-scale stats-scale">
-            <div class="goal-scale-track">
-                <div class="goal-scale-fill"
-                    style="width:{{ [month_total / monthly_max_hours * 100, 100]|min }}%;background:var(--accent);">
+        <div class="org-bars">
+            {% for row in stats.month.org_progress %}
+            <div class="org-bar">
+                <div class="org-bar-head">
+                    <span class="org-bar-name" title="{{ row.name }}">{{ row.org }}</span>
+                    {% if row.target %}
+                    <span class="org-bar-figure"><strong>{{ row.logged }}h</strong> / {{ row.target }}h</span>
+                    {% else %}
+                    <span class="org-bar-figure"><strong>{{ row.logged }}h</strong> · no agreed target</span>
+                    {% endif %}
                 </div>
-                <span class="goal-scale-mark" style="left:25%;"></span>
-                <span class="goal-scale-mark" style="left:50%;"></span>
-                <span class="goal-scale-mark" style="left:75%;"></span>
-                <span class="goal-scale-mark" style="left:100%;"></span>
+                {% if row.target %}
+                <div class="org-bar-track" style="width:{{ row.scale_pct }}%;">
+                    <div class="org-bar-fill" style="width:{{ [row.pct, 100]|min }}%;background:{{ row.color }};"></div>
+                    <span class="org-bar-plan" style="left:{{ [row.pace.expected_progress_pct, 100]|min }}%;"
+                        title="Expected by today: {{ row.pace.expected_hours }}h"></span>
+                </div>
+                <div class="org-bar-foot">
+                    <span>{{ row.pct }}% · {{ row.remaining }}h left</span>
+                    <span class="org-bar-delta delta-{{ row.pace.status }}">
+                        {%- if row.pace.status == 'ahead' -%}
+                        {{ row.pace.hours_delta }}h ahead
+                        {%- elif row.pace.status == 'behind' -%}
+                        {{ row.pace.hours_delta }}h behind
+                        {%- else -%}
+                        on pace
+                        {%- endif -%}
+                    </span>
+                </div>
+                {% endif %}
             </div>
-            <div class="goal-scale-labels" aria-label="אחוזי משרה">
-                <span style="left:25%;">1/4 · 40h</span>
-                <span style="left:50%;">2/4 · 80h</span>
-                <span style="left:75%;">3/4 · {{ monthly_current_cap_hours }}h</span>
-                <span style="left:100%;">Full · {{ monthly_max_hours }}h</span>
+            {% endfor %}
+            {% set widest = stats.month.org_progress | selectattr('target') | map(attribute='target') | max %}
+            <div class="org-bars-note">
+                Both bars share one hour scale &mdash; full width is {{ widest }}h, so an
+                hour is the same length in each.
             </div>
         </div>
     </div>
 
     <div class="card stats-analysis-card">
-        <div class="card-header"><i class="fas fa-scale-balanced"></i> Consulting / Infrastructure Split</div>
+        <div class="card-header"><i class="fas fa-scale-balanced"></i> ELSC Consulting / Infrastructure Split</div>
         <div class="split-panel wide">
             <div class="split-panel-head">
-                <span>50/50 target, combined excluded</span>
+                <span>50/50 target, combined halved into both, HUJI excluded</span>
                 <strong>{{ split.consulting_pct }}% / {{ split.infrastructure_pct }}%</strong>
+            </div>
+            <div class="split-note">
+                Consulting and Infrastructure below include half of the
+                {{ split.mixed }}h logged as combined work.
             </div>
             <div class="split-bar-wrap large">
                 <div class="split-bar-fill"
-                    style="width:{{ split.consulting_pct }}%;background:{{ category_color('counseling') }};"></div>
+                    style="width:{{ split.consulting_pct }}%;background:{{ category_color('consulting') }};"></div>
                 <div class="split-bar-fill"
-                    style="width:{{ split.infrastructure_pct }}%;background:{{ category_color('development') }};"></div>
+                    style="width:{{ split.infrastructure_pct }}%;background:{{ category_color('infrastructure') }};"></div>
                 {% if split.split_total == 0 %}
                 <div class="split-bar-empty"></div>
                 {% endif %}
             </div>
             <div class="split-breakdown">
                 <div>
-                    <span class="cat-badge counseling">{{ category_label('counseling') }}</span>
-                    <strong>{{ split.consulting }}h</strong>
+                    <span class="cat-badge consulting">{{ category_label('consulting') }}</span>
+                    <strong>{{ split.consulting_balance }}h</strong>
                 </div>
                 <div>
-                    <span class="cat-badge development">{{ category_label('development') }}</span>
-                    <strong>{{ split.infrastructure }}h</strong>
+                    <span class="cat-badge infrastructure">{{ category_label('infrastructure') }}</span>
+                    <strong>{{ split.infrastructure_balance }}h</strong>
                 </div>
                 <div>
                     <span class="cat-badge mixed">{{ category_label('mixed') }}</span>
                     <strong>{{ split.mixed }}h</strong>
+                </div>
+                <div>
+                    <span class="cat-badge huji">{{ category_label('huji') }}</span>
+                    <strong>{{ split.huji }}h</strong>
                 </div>
             </div>
         </div>
@@ -174,14 +230,14 @@
         <div class="category-summary-list">
             {% for cat in ordered_categories %}
             {% set hrs = stats[period_name].by_category.get(cat, 0) %}
-            {% if hrs or (period_name == 'month' and cat != 'other') %}
+            {% if cat not in separate_report_categories and (hrs or (period_name == 'month' and cat != 'other')) %}
             <div class="category-row">
                 <span class="cat-badge {{ cat }}">{{ category_label(cat) }}</span>
                 <strong>{{ hrs }}h</strong>
             </div>
             {% endif %}
             {% endfor %}
-            {% for cat, hrs in stats[period_name].by_category.items() if cat not in ordered_categories %}
+            {% for cat, hrs in stats[period_name].by_category.items() if cat not in ordered_categories and cat not in separate_report_categories %}
             <div class="category-row">
                 <span class="cat-badge {{ cat }}">{{ category_label(cat) }}</span>
                 <strong>{{ hrs }}h</strong>
@@ -220,8 +276,8 @@
         <div class="card-header"><i class="fas fa-file-export"></i> Export Report</div>
         <div class="utility-card-body">
             <div>
-                <div class="utility-title">Download Monthly Activity</div>
-                <div class="text-muted text-sm">TXT export with total, category totals, title totals, and entry details.</div>
+                <div class="utility-title">Download Monthly Employment Activity</div>
+                <div class="text-muted text-sm">TXT export excludes Stefano, which has its own report above.</div>
             </div>
             <div class="utility-actions">
                 <input type="month" id="export-month" class="form-control" value="{{ current_month }}">

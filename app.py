@@ -5,7 +5,7 @@ Flask application serving a single-page-style time tracker.
 
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, jsonify, flash, send_from_directory, Response
+    url_for, jsonify, send_from_directory, Response
 )
 from datetime import datetime
 import logging
@@ -26,8 +26,10 @@ def inject_template_config():
         'ordered_categories': db.ORDERED_CATEGORIES,
         'category_label': db.category_label,
         'category_color': db.category_color,
-        'monthly_max_hours': db.MONTHLY_MAX_HOURS,
-        'monthly_current_cap_hours': db.MONTHLY_CURRENT_CAP_HOURS,
+        'category_org': db.category_org,
+        'separate_report_categories': db.SEPARATE_REPORT_CATEGORIES,
+        'title_qualifier': db.title_qualifier,
+        'monthly_target_hours': db.MONTHLY_TARGET_HOURS,
     }
 
 
@@ -65,29 +67,6 @@ def index():
     return render_template('log.html', entries=entries, titles=titles, stats=stats)
 
 
-@app.route('/timer')
-def timer_page():
-    """Timer dashboard with quick stats overview."""
-    titles = db.get_titles()
-    active = db.get_active_entry()
-    recent = db.get_recent_entries(20)
-    stats = db.get_stats()
-
-    # Calculate elapsed seconds for the running timer (avoids timezone issues in JS)
-    elapsed_seconds = 0
-    if active and active.get('start_time'):
-        from datetime import datetime as _dt
-        start = _dt.strptime(active['start_time'], '%Y-%m-%d %H:%M:%S')
-        elapsed_seconds = int((_dt.now() - start).total_seconds())
-
-    return render_template('index.html',
-                           titles=titles,
-                           active=active,
-                           recent=recent,
-                           stats=stats,
-                           elapsed_seconds=elapsed_seconds)
-
-
 @app.route('/stats')
 def stats_page():
     """Detailed statistics page."""
@@ -101,38 +80,6 @@ def stats_page():
 def log_page():
     """Legacy log URL; the log is now the homepage."""
     return redirect(url_for('index'))
-
-
-@app.route('/titles')
-def titles_page():
-    """Manage titles."""
-    titles = db.get_titles()
-    return render_template('titles.html', titles=titles)
-
-
-# ── Timer API ───────────────────────────────────────────────
-
-@app.route('/api/start', methods=['POST'])
-def api_start():
-    data = request.get_json()
-    title_id = data.get('title_id')
-    if not title_id:
-        return jsonify({'error': 'title_id required'}), 400
-    db.start_entry(int(title_id))
-    active = db.get_active_entry()
-    return jsonify({'ok': True, 'active': active})
-
-
-@app.route('/api/stop', methods=['POST'])
-def api_stop():
-    db.stop_entry()
-    return jsonify({'ok': True})
-
-
-@app.route('/api/status')
-def api_status():
-    active = db.get_active_entry()
-    return jsonify({'active': active})
 
 
 # ── Entry CRUD API ──────────────────────────────────────────
@@ -169,41 +116,6 @@ def api_delete_entry(entry_id):
     return jsonify({'ok': True})
 
 
-# ── Title CRUD ──────────────────────────────────────────────
-
-@app.route('/api/title', methods=['POST'])
-def api_add_title():
-    data = request.get_json()
-    name = data.get('name', '').strip()
-    category = data.get('category', 'other')
-    color = data.get('color', '#9f4f35')
-    if not name:
-        return jsonify({'error': 'name required'}), 400
-    try:
-        db.add_title(name, category, color)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-    return jsonify({'ok': True})
-
-
-@app.route('/api/title/<int:title_id>', methods=['PUT'])
-def api_update_title(title_id):
-    data = request.get_json()
-    name = data.get('name', '').strip()
-    category = data.get('category', 'other')
-    color = data.get('color', '#9f4f35')
-    if not name:
-        return jsonify({'error': 'name required'}), 400
-    db.update_title(title_id, name, category, color)
-    return jsonify({'ok': True})
-
-
-@app.route('/api/title/<int:title_id>', methods=['DELETE'])
-def api_delete_title(title_id):
-    db.delete_title(title_id)
-    return jsonify({'ok': True})
-
-
 # ── Stats API ───────────────────────────────────────────────
 
 @app.route('/api/stats')
@@ -237,7 +149,10 @@ def api_export_report():
     except ValueError:
         return "Invalid month format. Use YYYY-MM", 400
 
-    entries = db.get_entries(start_date=start_date, end_date=end_date)
+    entries = [
+        entry for entry in db.get_entries(start_date=start_date, end_date=end_date)
+        if entry['category'] not in db.SEPARATE_REPORT_CATEGORIES
+    ]
     
     import io
     output = io.StringIO()
@@ -251,7 +166,8 @@ def api_export_report():
     
     output.write("Tomer Barak - AI R&D\n")
     output.write("ID: 200660397\n")
-    output.write("AI Advisor for Edmond and Lily Safra Center for Brain Sciences\n")
+    for line in db.advisor_role_lines():
+        output.write(line + "\n")
     output.write("=" * 40 + "\n\n")
     
     output.write(f"TimeTrack Report: {month_display}\n")
@@ -273,17 +189,16 @@ def api_export_report():
     
     if category_seconds:
         output.write("By Category:\n")
-        shown_categories = set()
-        for cat in db.ORDERED_CATEGORIES:
-            if cat == 'other' and cat not in category_seconds:
+        category_hours = {
+            cat: round(seconds / 3600, 2) for cat, seconds in category_seconds.items()
+        }
+        for org, org_hours, members in db.org_totals(category_hours):
+            output.write(f"  {org}: {org_hours}h\n")
+            # A single category named after its own org adds nothing to spell out.
+            if len(members) == 1 and db.category_label(members[0][0]) == org:
                 continue
-            seconds = category_seconds.get(cat, 0.0)
-            output.write(f"  - {db.category_label(cat)}: {round(seconds / 3600, 2)}h\n")
-            shown_categories.add(cat)
-        for cat, seconds in sorted(category_seconds.items()):
-            if cat in shown_categories:
-                continue
-            output.write(f"  - {db.category_label(cat)}: {round(seconds / 3600, 2)}h\n")
+            for cat, hours in members:
+                output.write(f"    - {db.category_label(cat)}: {hours}h\n")
         output.write("\n")
 
     if title_seconds:
@@ -309,6 +224,65 @@ def api_export_report():
         output.getvalue(),
         mimetype="text/plain",
         headers={"Content-disposition": f"attachment; filename=timetrack_report_{month_str}.txt"}
+    )
+
+
+@app.route('/api/report/stefano/export')
+def api_export_stefano_report():
+    """Export the finite Stefano engagement independently of monthly work."""
+    import io
+
+    entries = [
+        entry for entry in db.get_entries()
+        if entry['category'] == 'stefano'
+    ]
+    total_seconds = 0.0
+    title_seconds = {}
+    for entry in entries:
+        start = datetime.strptime(entry['start_time'], '%Y-%m-%d %H:%M:%S')
+        end = datetime.strptime(entry['end_time'], '%Y-%m-%d %H:%M:%S')
+        seconds = (end - start).total_seconds()
+        total_seconds += seconds
+        title = entry['title_name']
+        title_seconds[title] = title_seconds.get(title, 0.0) + seconds
+
+    logged = round(total_seconds / 3600, 2)
+    remaining = round(max(db.STEFANO_HOUR_CAP - logged, 0), 2)
+    output = io.StringIO()
+    output.write("Tomer Barak - Stefano Time Report\n")
+    output.write("=" * 40 + "\n\n")
+    output.write("--- SUMMARY ---\n")
+    output.write(f"Total Hours: {logged}h\n")
+    output.write(f"Engagement Cap: {db.STEFANO_HOUR_CAP}h\n")
+    output.write(f"Hours Remaining: {remaining}h\n")
+
+    if title_seconds:
+        output.write("\nBy Title:\n")
+        for title, seconds in sorted(
+            title_seconds.items(), key=lambda item: item[1], reverse=True
+        ):
+            output.write(f"  - {title}: {round(seconds / 3600, 2)}h\n")
+
+    output.write("\n--- DETAILS ---\n")
+    if not entries:
+        output.write("No Stefano entries found.\n")
+    else:
+        for entry in reversed(entries):
+            start = datetime.strptime(entry['start_time'], '%Y-%m-%d %H:%M:%S')
+            end = datetime.strptime(entry['end_time'], '%Y-%m-%d %H:%M:%S')
+            hours = round((end - start).total_seconds() / 3600, 2)
+            output.write(
+                f"[{start.strftime('%d-%m-%Y %H:%M')} to "
+                f"{end.strftime('%d-%m-%Y %H:%M')}] "
+                f"{entry['title_name']} : {hours}h\n"
+            )
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/plain",
+        headers={
+            "Content-disposition": "attachment; filename=stefano_time_report.txt"
+        },
     )
 
 
